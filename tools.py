@@ -33,10 +33,10 @@ def adb_shell(command: str) -> str:
     【触控操作】
     - input tap x y — 点击坐标
     - input swipe x1 y1 x2 y2 duration — 滑动
-    - input text "文字" — 输入文字(仅英文和数字)
     - input keyevent KEYCODE_BACK — 按返回键
     - input keyevent KEYCODE_HOME — 按主页键
     - input keyevent KEYCODE_ENTER — 按确认键
+    - 注意：不要用 input text 输入文字！请使用 input_text 工具代替
 
     【应用管理】
     - am start -n 包名/Activity — 启动指定Activity
@@ -71,7 +71,47 @@ def adb_shell(command: str) -> str:
     - svc data enable/disable — 开关移动数据
 
     你可以自由组合这些命令来完成任务。"""
+    # 拦截文字输入命令，自动走 input_text 逻辑
+    import re
+
+    # 拦截 input text "xxx" 或 input text xxx
+    text_match = re.match(r'input text ["\']?(.+?)["\']?\s*$', command)
+    if text_match:
+        return _input_text_impl(text_match.group(1))
+
+    # 拦截 am broadcast ADB_INPUT_TEXT
+    broadcast_match = re.search(r'ADB_INPUT_TEXT.*--es\s+\w+\s+["\']?(.+?)["\']?\s*$', command)
+    if broadcast_match:
+        return _input_text_impl(broadcast_match.group(1))
+
     return _run(f"shell {command}")
+
+
+def _input_text_impl(text: str) -> str:
+    """内部文字输入实现"""
+    import time
+
+    is_ascii = all(ord(c) < 128 for c in text)
+    if is_ascii:
+        escaped = text.replace(" ", "%s").replace("&", "\\&").replace("<", "\\<").replace(">", "\\>").replace("'", "\\'").replace('"', '\\"')
+        result = _run(f'shell input text "{escaped}"')
+        if "error" in result.lower() or "exception" in result.lower():
+            return f"ASCII输入失败: {result}"
+        return f"已输入: {text}"
+
+    # 中文：ADBKeyboard
+    check_ime = _run("shell ime list -s")
+    if "adbkeyboard" in check_ime.lower():
+        _run("shell ime set com.android.adbkeyboard/.AdbIME")
+        time.sleep(0.3)
+        _run(f"shell am broadcast -a ADB_INPUT_TEXT --es msg '{text}'")
+        return f"已通过 ADBKeyboard 输入: {text}"
+
+    # 回退：剪贴板
+    _run(f"shell am broadcast -a clipper.set -e text '{text}'")
+    time.sleep(0.2)
+    _run("shell input keyevent 279")
+    return f"已通过剪贴板粘贴: {text}"
 
 
 # ---- 文字输入工具 ----

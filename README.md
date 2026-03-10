@@ -52,7 +52,7 @@
 ### 2. 安装
 
 ```bash
-git clone https://github.com/yourname/adbPhoneAgent.git
+git clone https://github.com/djcgh/AdbPhoneAgent.git
 cd adbPhoneAgent
 pip install -r requirements.txt
 ```
