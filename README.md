@@ -1,3 +1,5 @@
+中文 | [English](./README_EN.md)
+
 # 📱 ADB Phone Agent
 
 用自然语言控制你的 Android 手机。基于 ADB 原生指令 + LLM Agent，通过 UI 结构树解析实现快速精准的手机操控。
