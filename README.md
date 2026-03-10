@@ -74,6 +74,21 @@ LLM_MODEL=qwen3.5-plus
 VL_MODEL=qwen-vl-plus
 ```
 
+### 4. 中文输入支持（推荐）
+
+安装 [ADBKeyboard](https://github.com/nickel8448/ADBKeyboard) 以获得完美的中文输入支持：
+
+```bash
+# 下载并安装
+adb install ADBKeyboard.apk
+
+# 启用输入法
+adb shell ime enable com.android.adbkeyboard/.AdbIME
+adb shell ime set com.android.adbkeyboard/.AdbIME
+```
+
+不安装也能用，Agent 会自动回退到剪贴板粘贴方式，但 ADBKeyboard 更稳定。
+
 ### 4. 启动
 
 ```bash
@@ -93,6 +108,7 @@ python server.py
 | 工具 | 说明 |
 |---|---|
 | `adb_shell` | 万能工具，执行任意 Android shell 命令 |
+| `input_text` | 智能文字输入，自动处理中英文（支持 ADBKeyboard / 剪贴板回退） |
 | `get_ui_tree` | 获取界面 XML 结构树（Agent 的"眼睛"） |
 | `get_screenshot` | 截图 + 视觉模型分析（辅助理解） |
 | `search_installed_apps` | 搜索已安装应用的包名 |

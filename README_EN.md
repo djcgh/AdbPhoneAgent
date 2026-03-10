@@ -74,6 +74,21 @@ LLM_MODEL=qwen3.5-plus
 VL_MODEL=qwen-vl-plus
 ```
 
+### 4. Chinese Input Support (Recommended)
+
+Install [ADBKeyboard](https://github.com/nickel8448/ADBKeyboard) for reliable Chinese/Unicode text input:
+
+```bash
+# Install
+adb install ADBKeyboard.apk
+
+# Enable
+adb shell ime enable com.android.adbkeyboard/.AdbIME
+adb shell ime set com.android.adbkeyboard/.AdbIME
+```
+
+Without it, the Agent falls back to clipboard paste — works but ADBKeyboard is more reliable.
+
 ### 4. Run
 
 ```bash
@@ -93,6 +108,7 @@ python server.py
 | Tool | Description |
 |---|---|
 | `adb_shell` | Universal tool — execute any Android shell command |
+| `input_text` | Smart text input — auto-handles Chinese/English (ADBKeyboard / clipboard fallback) |
 | `get_ui_tree` | Get UI XML structure tree (Agent's "eyes") |
 | `get_screenshot` | Screenshot + vision model analysis (fallback) |
 | `search_installed_apps` | Search installed app package names |

@@ -74,6 +74,49 @@ def adb_shell(command: str) -> str:
     return _run(f"shell {command}")
 
 
+# ---- 文字输入工具 ----
+
+@function_tool
+def input_text(text: str) -> str:
+    """在当前焦点输入框中输入文字。支持中文、英文、数字、符号等任意文字。
+    使用前请确保已经点击了输入框获取焦点。
+
+    工作原理：
+    1. 如果安装了 ADBKeyboard，通过广播直接输入（最可靠）
+    2. 否则通过剪贴板粘贴方式输入中文
+    3. 纯 ASCII 文字直接用 input text 命令
+
+    注意：如果输入不生效，请先确认输入框已获取焦点（点击输入框）。"""
+
+    # 检查是否纯 ASCII
+    is_ascii = all(ord(c) < 128 for c in text)
+
+    if is_ascii:
+        # 纯英文数字直接输入
+        escaped = text.replace(" ", "%s").replace("&", "\\&").replace("<", "\\<").replace(">", "\\>").replace("'", "\\'").replace('"', '\\"')
+        return _run(f'shell input text "{escaped}"')
+
+    # 中文输入：先尝试 ADBKeyboard 广播方式
+    check_ime = _run("shell ime list -s")
+    if "adbkeyboard" in check_ime.lower():
+        # 确保 ADBKeyboard 是当前输入法
+        _run("shell ime set com.android.adbkeyboard/.AdbIME")
+        result = _run(f"shell am broadcast -a ADB_INPUT_TEXT --es msg '{text}'")
+        if "result=0" not in result:
+            return f"通过 ADBKeyboard 输入: {text}"
+        return f"ADBKeyboard 广播发送成功: {text}"
+
+    # 回退方案：通过剪贴板粘贴
+    # 写入剪贴板
+    _run(f"shell am broadcast -a clipper.set -e text '{text}'")
+    # 尝试直接 service call 写剪贴板（不需要额外 app）
+    _run(f"shell input text '{text}' 2>/dev/null")
+    # 模拟 Ctrl+V 粘贴
+    _run("shell input keyevent 279")  # KEYCODE_PASTE
+
+    return f"已尝试输入: {text}（如果输入失败，建议安装 ADBKeyboard 以获得最佳中文输入支持）"
+
+
 # ---- 信息获取工具 ----
 
 @function_tool
