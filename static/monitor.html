@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>ADB Agent - PC 控制台</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, sans-serif;
+    background: #0a0a0a; color: #e0e0e0;
+    height: 100vh; display: flex; overflow: hidden;
+  }
+  .screen-panel {
+    flex: 0 0 400px; display: flex; flex-direction: column;
+    align-items: center; padding: 16px;
+    border-right: 1px solid #222;
+  }
+  .screen-panel h3 { color: #4fc3f7; margin-bottom: 8px; }
+  #phone-frame {
+    width: 360px; flex: 1;
+    background: #111; border-radius: 24px;
+    overflow: hidden; border: 2px solid #333;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  #screen { width: 100%; height: 100%; object-fit: contain; display: none; }
+  .no-signal { color: #444; font-size: 14px; position: absolute; }
+  .right-panel {
+    flex: 1; display: flex; flex-direction: column; padding: 16px;
+  }
+  .right-panel h3 { color: #4fc3f7; margin-bottom: 8px; }
+  #log {
+    flex: 1; overflow-y: auto; padding: 12px;
+    background: #1a1a2e; border-radius: 12px;
+    font-size: 13px; line-height: 1.8;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    margin-bottom: 12px;
+  }
+  .log-item { padding: 3px 0; border-bottom: 1px solid #1e1e3a; }
+  .log-instruction { color: #4fc3f7; font-weight: bold; font-size: 14px; }
+  .log-exec { color: #aaa; }
+  .log-result { color: #66bb6a; }
+  .loading { display: none; padding: 8px 12px; color: #4fc3f7; font-size: 13px; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  /* markdown 渲染样式 */
+  .md-content { font-family: -apple-system, sans-serif; line-height: 1.7; }
+  .md-content h1, .md-content h2, .md-content h3 { color: #4fc3f7; margin: 8px 0 4px; }
+  .md-content h1 { font-size: 16px; } .md-content h2 { font-size: 15px; } .md-content h3 { font-size: 14px; }
+  .md-content p { margin: 4px 0; }
+  .md-content ul, .md-content ol { padding-left: 20px; margin: 4px 0; }
+  .md-content li { margin: 2px 0; }
+  .md-content code { background: #2a2a4a; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+  .md-content pre { background: #2a2a4a; padding: 8px; border-radius: 6px; overflow-x: auto; margin: 6px 0; }
+  .md-content pre code { background: none; padding: 0; }
+  .md-content strong { color: #fff; }
+  .md-content table { border-collapse: collapse; margin: 6px 0; width: 100%; }
+  .md-content th, .md-content td { border: 1px solid #333; padding: 4px 8px; text-align: left; }
+  .md-content th { background: #2a2a4a; color: #4fc3f7; }
+  .input-area { display: flex; gap: 8px; }
+  #input {
+    flex: 1; padding: 14px; border-radius: 12px;
+    border: 1px solid #333; background: #1a1a2e; color: #fff;
+    font-size: 15px; outline: none;
+  }
+  #input:focus { border-color: #4fc3f7; }
+  #sendBtn {
+    padding: 14px 28px; border-radius: 12px;
+    background: #4fc3f7; color: #000; border: none;
+    font-size: 15px; font-weight: bold; cursor: pointer;
+  }
+  #sendBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+  #status { text-align: center; padding: 6px; font-size: 12px; color: #666; }
+</style>
+</head>
+<body>
+  <div class="screen-panel">
+    <h3>📱 手机画面</h3>
+    <div id="status">连接中...</div>
+    <div id="phone-frame">
+      <img id="screen" alt="手机画面" />
+      <span class="no-signal" id="no-signal">等待画面...</span>
+    </div>
+  </div>
+  <div class="right-panel">
+    <h3>📋 操作日志</h3>
+    <div id="log"></div>
+    <div id="loading" class="loading">⏳ Agent 思考中...</div>
+    <div class="input-area">
+      <input id="input" placeholder="输入指令，如：打开微信、打开设置..." autocomplete="off" />
+      <button id="sendBtn" onclick="send()">发送</button>
+    </div>
+  </div>
+
+<script>
+const screen = document.getElementById('screen');
+const noSignal = document.getElementById('no-signal');
+const log = document.getElementById('log');
+const input = document.getElementById('input');
+const btn = document.getElementById('sendBtn');
+const statusEl = document.getElementById('status');
+const loading = document.getElementById('loading');
+let wsMonitor, wsControl;
+
+function connectMonitor() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  wsMonitor = new WebSocket(`${proto}//${location.host}/ws/monitor`);
+  wsMonitor.onopen = () => { statusEl.textContent = '✅ 已连接'; };
+  wsMonitor.onclose = () => {
+    statusEl.textContent = '❌ 断开，3秒后重连...';
+    setTimeout(connectMonitor, 3000);
+  };
+  wsMonitor.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'screenshot') {
+      screen.src = 'data:image/jpeg;base64,' + msg.data;
+      screen.style.display = 'block';
+      noSignal.style.display = 'none';
+    } else {
+      addLog(msg.type, msg.data);
+      if (msg.type === 'log') {
+        loading.textContent = '⏳ ' + msg.data;
+      }
+      if (msg.type === 'result') {
+        loading.style.display = 'none';
+        btn.disabled = false;
+        input.focus();
+      }
+    }
+  };
+}
+
+function connectControl() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  wsControl = new WebSocket(`${proto}//${location.host}/ws/mobile`);
+  wsControl.onclose = () => { setTimeout(connectControl, 3000); };
+  wsControl.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'result') {
+      btn.disabled = false;
+      input.focus();
+    }
+  };
+}
+
+function addLog(type, text) {
+  const div = document.createElement('div');
+  div.className = 'log-item';
+  const ts = new Date().toLocaleTimeString();
+  const classMap = {
+    instruction: 'log-instruction',
+    log: 'log-exec',
+    result: 'log-result',
+    status: 'log-exec'
+  };
+  const prefix = type === 'instruction' ? '🎯 指令' : type === 'result' ? '✅ 结果' : '⚙️';
+
+  if (type === 'result') {
+    // result 用 markdown 渲染
+    div.innerHTML = `<span style="color:#555">[${ts}]</span> <span class="log-result">${prefix}</span><div class="md-content">${marked.parse(text)}</div>`;
+  } else {
+    div.innerHTML = `<span style="color:#555">[${ts}]</span> <span class="${classMap[type] || ''}">${prefix} ${text}</span>`;
+  }
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function send() {
+  const text = input.value.trim();
+  if (!text || !wsControl || wsControl.readyState !== 1) return;
+  addLog('instruction', `> ${text}`);
+  wsControl.send(JSON.stringify({ instruction: text }));
+  input.value = '';
+  btn.disabled = true;
+  loading.style.display = 'block';
+}
+
+input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+
+connectMonitor();
+connectControl();
+</script>
+</body>
+</html>
