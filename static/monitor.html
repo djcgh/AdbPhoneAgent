@@ -89,6 +89,7 @@
     <div class="input-area">
       <input id="input" placeholder="输入指令，如：打开微信、打开设置..." autocomplete="off" />
       <button id="sendBtn" onclick="send()">发送</button>
+      <button id="stopBtn" onclick="stop()" style="display:none;padding:14px 28px;border-radius:12px;background:#ef5350;color:#fff;border:none;font-size:15px;font-weight:bold;cursor:pointer;">停止</button>
     </div>
   </div>
 
@@ -98,6 +99,7 @@ const noSignal = document.getElementById('no-signal');
 const log = document.getElementById('log');
 const input = document.getElementById('input');
 const btn = document.getElementById('sendBtn');
+const stopBtn = document.getElementById('stopBtn');
 const statusEl = document.getElementById('status');
 const loading = document.getElementById('loading');
 let wsMonitor, wsControl;
@@ -116,6 +118,15 @@ function connectMonitor() {
       screen.src = 'data:image/jpeg;base64,' + msg.data;
       screen.style.display = 'block';
       noSignal.style.display = 'none';
+    } else if (msg.type === 'audio') {
+      if (msg.data === '__stop__') {
+        if (window._currentAudio) { window._currentAudio.pause(); window._currentAudio = null; }
+        window._audioQueue = [];
+      } else {
+        if (!window._audioQueue) window._audioQueue = [];
+        window._audioQueue.push(msg.data);
+        if (!window._audioPlaying) playNextAudio();
+      }
     } else {
       addLog(msg.type, msg.data);
       if (msg.type === 'log') {
@@ -124,6 +135,8 @@ function connectMonitor() {
       if (msg.type === 'result') {
         loading.style.display = 'none';
         btn.disabled = false;
+        btn.style.display = '';
+        stopBtn.style.display = 'none';
         input.focus();
       }
     }
@@ -138,6 +151,8 @@ function connectControl() {
     const msg = JSON.parse(e.data);
     if (msg.type === 'result') {
       btn.disabled = false;
+      btn.style.display = '';
+      stopBtn.style.display = 'none';
       input.focus();
     }
   };
@@ -172,10 +187,45 @@ function send() {
   wsControl.send(JSON.stringify({ instruction: text }));
   input.value = '';
   btn.disabled = true;
+  btn.style.display = 'none';
+  stopBtn.style.display = '';
   loading.style.display = 'block';
 }
 
+function stop() {
+  if (wsControl && wsControl.readyState === 1) {
+    wsControl.send(JSON.stringify({ action: 'stop' }));
+    addLog('log', '⏹ 正在停止...');
+  }
+}
+
 input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+
+function playNextAudio() {
+  if (!window._audioQueue || window._audioQueue.length === 0) {
+    window._audioPlaying = false;
+    return;
+  }
+  window._audioPlaying = true;
+  const b64 = window._audioQueue.length > 2
+    ? (window._audioQueue.splice(0, window._audioQueue.length - 1), window._audioQueue.shift())
+    : window._audioQueue.shift();
+  const audio = new Audio('data:audio/mp3;base64,' + b64);
+  window._currentAudio = audio;
+  audio.onended = () => { window._currentAudio = null; playNextAudio(); };
+  audio.onerror = () => { window._currentAudio = null; playNextAudio(); };
+  audio.play().catch((e) => {
+    console.log('[TTS] 播放失败，可能需要先点击页面:', e);
+    window._currentAudio = null;
+    playNextAudio();
+  });
+}
+
+// 点击页面任意位置解锁音频自动播放
+document.addEventListener('click', () => {
+  const silence = new Audio('data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwMHAAAAAAD/+1DEAAAB8ANoAAAAIAAANIAAAARMQU1FMy4xMDBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7UMQbAAADSAAAAAAAAANIAAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVQ==');
+  silence.play().catch(() => {});
+}, { once: true });
 
 connectMonitor();
 connectControl();

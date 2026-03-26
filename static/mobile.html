@@ -51,12 +51,14 @@
   <div class="input-area">
     <input id="input" placeholder="如：打开微信" autocomplete="off" />
     <button id="sendBtn" onclick="send()">发送</button>
+    <button id="stopBtn" onclick="stop()" style="display:none;padding:14px 24px;border-radius:12px;background:#ef5350;color:#fff;border:none;font-size:16px;font-weight:bold;cursor:pointer;">停止</button>
   </div>
 
 <script>
 const log = document.getElementById('log');
 const input = document.getElementById('input');
 const btn = document.getElementById('sendBtn');
+const stopBtn = document.getElementById('stopBtn');
 const status = document.getElementById('status');
 let ws;
 
@@ -73,6 +75,8 @@ function connect() {
     addLog(msg.type, msg.data);
     if (msg.type === 'result') {
       btn.disabled = false;
+      btn.style.display = '';
+      stopBtn.style.display = 'none';
       input.focus();
     }
   };
@@ -94,6 +98,15 @@ function send() {
   ws.send(JSON.stringify({ instruction: text }));
   input.value = '';
   btn.disabled = true;
+  btn.style.display = 'none';
+  stopBtn.style.display = '';
+}
+
+function stop() {
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ action: 'stop' }));
+    addLog('log', '⏹ 正在停止...');
+  }
 }
 
 input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });

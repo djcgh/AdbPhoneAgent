@@ -84,34 +84,57 @@ def adb_shell(command: str) -> str:
     if broadcast_match:
         return _input_text_impl(broadcast_match.group(1))
 
-    return _run(f"shell {command}")
+    # 执行前记录界面快照
+    need_wait = _is_ui_changing_command(command)
+    old_snapshot = _get_ui_snapshot() if need_wait else None
+
+    result = _run(f"shell {command}")
+
+    # 界面操作后等待界面稳定
+    if need_wait and old_snapshot:
+        _wait_ui_stable(old_snapshot)
+
+    return result
+
+
+def _is_ui_changing_command(cmd: str) -> bool:
+    """判断命令是否会导致界面变化"""
+    triggers = ["input tap", "input swipe", "input keyevent", "am start", "monkey", "input roll"]
+    return any(t in cmd for t in triggers)
+
+
+def _get_ui_snapshot() -> str:
+    """快速获取当前界面的指纹（Activity + 关键元素哈希）"""
+    activity = _run("shell dumpsys activity activities | grep mResumedActivity")
+    return activity
+
+
+def _wait_ui_stable(old_snapshot: str, timeout: float = 3.0, interval: float = 0.5):
+    """等待界面变化并稳定"""
+    import time
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        time.sleep(interval)
+        new_snapshot = _get_ui_snapshot()
+        if new_snapshot != old_snapshot:
+            # 界面变了，再等一小段确认稳定
+            time.sleep(0.3)
+            return
+    # 超时也正常返回，可能操作没有改变界面（比如点击空白处）
 
 
 def _input_text_impl(text: str) -> str:
-    """内部文字输入实现"""
+    """内部文字输入实现 - 统一使用 ADBKeyboard"""
     import time
-
-    is_ascii = all(ord(c) < 128 for c in text)
-    if is_ascii:
-        escaped = text.replace(" ", "%s").replace("&", "\\&").replace("<", "\\<").replace(">", "\\>").replace("'", "\\'").replace('"', '\\"')
-        result = _run(f'shell input text "{escaped}"')
-        if "error" in result.lower() or "exception" in result.lower():
-            return f"ASCII输入失败: {result}"
-        return f"已输入: {text}"
-
-    # 中文：ADBKeyboard
-    check_ime = _run("shell ime list -s")
-    if "adbkeyboard" in check_ime.lower():
-        _run("shell ime set com.android.adbkeyboard/.AdbIME")
-        time.sleep(0.3)
-        _run(f"shell am broadcast -a ADB_INPUT_TEXT --es msg '{text}'")
-        return f"已通过 ADBKeyboard 输入: {text}"
-
-    # 回退：剪贴板
-    _run(f"shell am broadcast -a clipper.set -e text '{text}'")
-    time.sleep(0.2)
-    _run("shell input keyevent 279")
-    return f"已通过剪贴板粘贴: {text}"
+    result = _run(f"shell am broadcast -a ADB_INPUT_TEXT --es msg '{text}'")
+    time.sleep(0.3)
+    if "error" in result.lower() and "adbkeyboard" not in result.lower():
+        # ADBKeyboard 失败，回退剪贴板
+        _run(f"shell am broadcast -a clipper.set -e text '{text}'")
+        time.sleep(0.2)
+        _run("shell input keyevent 279")
+        return f"已通过剪贴板粘贴: {text}"
+    return f"已输入: {text}"
 
 
 # ---- 文字输入工具 ----
@@ -126,31 +149,7 @@ def input_text(text: str) -> str:
     3. 再调用本工具输入文字
 
     如果输入没有生效，可能是输入框未获取焦点，请重新点击输入框后再试。"""
-    import time
-
-    is_ascii = all(ord(c) < 128 for c in text)
-
-    if is_ascii:
-        escaped = text.replace(" ", "%s").replace("&", "\\&").replace("<", "\\<").replace(">", "\\>").replace("'", "\\'").replace('"', '\\"')
-        result = _run(f'shell input text "{escaped}"')
-        if "error" in result.lower() or "exception" in result.lower():
-            return f"ASCII输入失败: {result}"
-        return f"已输入: {text}"
-
-    # 中文输入：优先 ADBKeyboard
-    check_ime = _run("shell ime list -s")
-    if "adbkeyboard" in check_ime.lower():
-        _run("shell ime set com.android.adbkeyboard/.AdbIME")
-        time.sleep(0.3)
-        # 注意：ADBKeyboard 的广播 key 是 msg，不是 text
-        result = _run(f"shell am broadcast -a ADB_INPUT_TEXT --es msg '{text}'")
-        return f"已通过 ADBKeyboard 输入: {text}"
-
-    # 回退方案：剪贴板
-    _run(f"shell am broadcast -a clipper.set -e text '{text}'")
-    time.sleep(0.2)
-    _run("shell input keyevent 279")  # KEYCODE_PASTE
-    return f"已通过剪贴板粘贴: {text}（如果失败，建议安装 ADBKeyboard）"
+    return _input_text_impl(text)
 
 
 # ---- 信息获取工具 ----
