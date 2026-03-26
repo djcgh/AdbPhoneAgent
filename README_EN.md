@@ -2,7 +2,7 @@
 
 # 📱 ADB Phone Agent
 
-Control your Android phone with natural language. An AI Agent powered by ADB native commands + UI XML tree parsing for fast and precise phone automation.
+Control your Android phone with natural language. An AI Agent powered by ADB native commands + UI XML tree parsing for fast and precise phone automation. Built-in TTS voice narration for accessibility.
 
 ## ✨ Key Features
 
@@ -28,6 +28,32 @@ Built on [OpenAI Agents SDK](https://github.com/openai/openai-agents-python), no
 - **Universal adb_shell tool**: LLMs already know hundreds of Android shell commands — no need to enumerate
 - **Function calling**: Standard tool calling protocol with LLM
 - **Streaming output**: Real-time display of Agent's thinking and actions
+
+### 🔊 Accessibility Voice Narration
+
+Built-in TTS for visually impaired users:
+
+- **Step narration**: Real-time voice feedback for each action ("Opening WeChat", "Tapping screen")
+- **Result narration**: Voice summary when task completes ("You have 3 unread messages, the first one is...")
+- **Natural language output**: Agent responses optimized for listening — concise and conversational
+- **Powered by edge-tts**: Free, high-quality Chinese voice synthesis with multiple voice options
+- **Toggleable**: Disable with `TTS_ENABLED=false`
+
+### 💬 Multi-turn Conversation
+
+Agent remembers previous operations and results:
+
+- Retains last 20 conversation turns
+- Supports follow-ups: "Open that app again", "What did the second message say?"
+- Clear history endpoint for fresh conversations
+
+### ⏹️ Task Stop Control
+
+Stop any running operation at any time:
+
+- Stop button on both PC console and mobile page
+- Immediately interrupts the Agent execution loop
+- Voice feedback: "Operation stopped"
 
 ### 🔌 Multi-Model Support
 
@@ -72,6 +98,10 @@ LLM_MODEL=qwen3.5-plus
 
 # Optional: Vision model for screenshot understanding
 VL_MODEL=qwen-vl-plus
+
+# TTS voice narration (enabled by default)
+TTS_ENABLED=true
+TTS_VOICE=zh-CN-XiaoxiaoNeural
 ```
 
 ### 4. Chinese Input Support (Recommended)
@@ -79,27 +109,23 @@ VL_MODEL=qwen-vl-plus
 Install [ADBKeyboard](https://github.com/nickel8448/ADBKeyboard) for reliable Chinese/Unicode text input:
 
 ```bash
-# Install
 adb install ADBKeyboard.apk
-
-# Enable
 adb shell ime enable com.android.adbkeyboard/.AdbIME
-adb shell ime set com.android.adbkeyboard/.AdbIME
 ```
 
-Without it, the Agent falls back to clipboard paste — works but ADBKeyboard is more reliable.
+The server automatically switches to ADBKeyboard on startup. Without it, the Agent falls back to clipboard paste.
 
-### 4. Run
+### 5. Run
 
 ```bash
 python server.py
 ```
 
-### 5. Use
+### 6. Use
 
 - **PC Console**: Open `http://localhost:8000/monitor`
   - Left: Real-time phone screen
-  - Right: Action logs + command input
+  - Right: Action logs + command input + stop button
 - **Mobile**: Open `http://your-pc-ip:8000/mobile`
   - Lightweight command input page
 
@@ -108,13 +134,11 @@ python server.py
 | Tool | Description |
 |---|---|
 | `adb_shell` | Universal tool — execute any Android shell command |
-| `input_text` | Smart text input — auto-handles Chinese/English (ADBKeyboard / clipboard fallback) |
+| `input_text` | Smart text input (unified ADBKeyboard, clipboard fallback) |
 | `get_ui_tree` | Get UI XML structure tree (Agent's "eyes") |
 | `get_screenshot` | Screenshot + vision model analysis (fallback) |
 | `search_installed_apps` | Search installed app package names |
 | `get_device_info` | Get device basic info |
-
-The Agent can execute all Android commands through `adb_shell`, including touch operations, app management, system settings, file operations, etc. The LLM inherently knows Android shell commands — no enumeration needed.
 
 ## 📝 Usage Examples
 
@@ -124,12 +148,13 @@ The Agent can execute all Android commands through `adb_shell`, including touch 
 > Turn screen brightness to minimum
 > Which app takes the most storage space
 > Open browser and search for today's weather
+> Open that app again (multi-turn conversation)
 ```
 
 ## 🏗️ Architecture
 
 ```
-User inputs natural language command
+User inputs natural language command (text / voice in future)
         ↓
    OpenAI Agents SDK (function calling)
         ↓
@@ -137,34 +162,25 @@ User inputs natural language command
    │ get_ui_tree() → XML structure    │ ← Primary perception
    │ get_screenshot() → Vision model  │ ← Fallback perception
    │ adb_shell() → Execute action     │ ← Action
+   │ TTS narrates each step           │ ← Accessibility
    │ ... loop until task complete     │
    └──────────────────────────────────┘
         ↓
-   Result + real-time log streaming
+   Result + voice narration + real-time log streaming
 ```
 
 ## 🗺️ Roadmap
 
-### 🔊 Accessibility Mode
-
-The long-term goal is to become a phone control assistant for visually impaired users:
+### 🔊 Full Voice Interaction
 
 - **Voice input**: Receive commands via speech recognition (STT)
-- **Step narration**: TTS playback for each Agent action in real-time
-- **Page reading**: Auto-summarize and read aloud current screen content after operations
+- **Page reading**: Auto-summarize and read aloud current screen content
 - **Conversational**: Support follow-up questions ("What did the second message say?")
 
-```
-User says: "Check if I have new WeChat messages"
-    ↓
-🎤 Speech recognition → Text command
-    ↓
-🤖 Agent: "Opening WeChat..." (voice)
-🤖 Agent: "Entered WeChat home..." (voice)
-🤖 Agent: "You have 3 unread messages. Zhang San says: Meeting tomorrow..." (voice)
-```
+### 📱 Multi-device Support
 
-UI tree parsing has an even greater advantage in accessibility — structured data is naturally suited for voice narration, more precise and efficient than image recognition descriptions.
+- Manage multiple Android devices simultaneously
+- Switch control target by device ID
 
 ## 📄 License
 
